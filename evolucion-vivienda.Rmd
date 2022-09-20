@@ -1,0 +1,223 @@
+---
+title: "Evolución"
+author: "Clara Albert - 1530244"
+date: "Diciembre del 2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(forecast)
+nacional <- read_excel("nacional.xlsx")
+
+canarias <- read_excel("canarias.xlsx")
+```
+
+### Ejercicio 1
+
+**Realiza una comparativa entre la evolución temporal de Canarias como la Nacional. Explica brevemente las dos series y la comparativa.**
+
+```{r}
+ts.nac = ts(nacional$Total, frequency = 4, start=c(2007,1))
+ts.can = ts(canarias$Total, frequency = 4,start=c(2007,1))
+plot(ts.nac, col="blue",lwd=3, type="l",xlab="Tiempo", ylab="Precio", main="Evolución de la vivienda de segunda mano", cex.main=1)
+lines(ts.can, col="red", lwd=3)
+legend(x = "topleft",lty=c(1,1),legend=c("CCAA","Nacional"),col=c("red","blue"),bty = "n",text.font = 0)
+```
+Los datos tienen una periodicidad trimestral, por lo que tenemos cuatro datos por año. 
+
+Vemos como las dos series siguen prácticamente el mismo patrón. Cuando una desciende, la otra también lo hace y pasa lo mismo con los ascensos. Primero tiene una tendencia decreciente y a partir del 8 trimestre la tendencia pasa a ser creciente. 
+
+Ninguna de las dos tiene estacionalidad. 
+
+### Ejercicio 2
+
+**Añade una gráfica que muestre la evolución para Canarias y su media móvil y media global. Explica brevemente la gráfica.**
+
+```{r}
+media_global=mean(ts.can)
+trend_can_4=ma(ts.can, order=4, centre =T)
+plot(ts.can, col="DarkBlue", lwd=5, type="l",main="Evolución de la vivienda de segunda mano en Canarias", xlab="Tiempo", ylab="Precio",cex.main=1)
+abline(h=media_global, col="green", lwd=3)
+lines(trend_can_4, col="gold", lwd=3)
+legend(x = "topleft",lty=c(1,1,1),legend=c("Serie temporal","Media global","Media móvil orden 4"),col=c("DarkBlue","green","gold"),bty = "n",text.font = 0)
+
+ggseasonplot(ts.can)
+```
+Hemos escogido una media móvil de orden 4 ya que los datos son trimestrales y por lo tanto es la media móvil que suavizará mejor la serie. 
+
+### Ejercicio 3
+
+**A partir del pico más bajo de la serie muestra:**
+
+**- El % de descenso desde el pico más alto hasta el pico más bajo. ¿Cuántos trimestres ha habido de descenso?**
+```{r}
+minimo = min(ts.can)
+maximo = max(ts.can[1:which.min(ts.can)])
+
+descenso = ((maximo - minimo) / minimo) *100; descenso
+
+which.min(ts.can) - which(ts.can==maximo) #Número de trimestres durante el descenso
+
+desc_trim=ts.can[which(ts.can==maximo):which.min(ts.can)]
+desc_trim=ts(desc_trim, frequency = 4, start=c(2007,1))
+plot(desc_trim, col="DarkBlue", lwd=5, type="l",main="Descenso máximo de la vivienda de segunda mano", xlab="Tiempo", ylab="Precio",cex.main=1)
+```
+Han habido 26 trimestres de descenso 
+
+# Hacer gráfico desde el punto máximo al punto mínimo
+
+**- ¿Cuándo ha sido el mayor descenso entre trimestre y trimestre?**
+```{r}
+desc = as.numeric(length(desc_trim))
+for (i in 2:length(desc_trim)){
+	desc[i-1] = desc_trim[i] - desc_trim[i-1] 
+}
+min(desc)
+which.min(desc)
+ts.can
+```
+Se ha producido un descenso del 6.615 en el precio de la viviienda de segunda mano. Este descenso se produció en el trimestre 25 (de Q1 2013 al Q2 2013). 
+
+# En el gráfico mostrar el máximo descenso
+
+**- El % de incremento desde el pico más bajo al dato más actual. ¿Cuántos trimestres ha habido de incremento?**
+```{r}
+ultimo = ts.can[length(ts.can)]
+incremento = ((ultimo - minimo) / minimo) *100; incremento
+
+length(ts.can)- which.min(ts.can) #Número de trimestres durante el descenso
+
+
+inc_trim=ts.can[which.min(ts.can): length(ts.can)]
+inc_trim=ts(inc_trim, frequency = 4, start=c(2014,2))
+plot(inc_trim, col="DarkBlue", lwd=5, type="l",main="Incremento del pico más bajo al actual", xlab="Tiempo", ylab="Precio", cex.main=1)
+```
+
+**- ¿Cuándo ha sido el mayor incremento entre trimestre y trimestre?**
+```{r}
+inc_trim
+asc = as.numeric(length(inc_trim))
+for (i in 2:length(inc_trim)){
+	asc[i-1] = inc_trim[i] - inc_trim[i-1] 
+}
+max(asc)
+which.max(asc)
+```
+
+**- ¿Se han alcanzado actualmente los precios del pico más alto?**
+
+Tal y como podemos ver en la gráfica de la serie temporal, el precio actual es mucho más superior que el máximo de toda la serie que se produjo desde que tenemos datos. 
+
+Actualmente, los precios no son los más altos que han habido, ya que el máximo absoluto fue en el último trimestre de 2020, que podría coincidir con el final de la cuarentena a causa del virus Covid.
+
+```{r}
+plot(ts.can, col="DarkBlue", lwd=3, type="l",main="Evolución de la vivienda de segunda mano", xlab="Tiempo", ylab="Precio", cex.main=1)
+abline(h=maximo, col="2", lwd=3)
+```
+
+
+### Ejercicio 4
+**Decide si para la previsión de 2022 se va a trabajar con toda la serie o sólo la última parte**
+Vista la serie es mejor trabajar con la última parte ya que la tendencia de la serie ha ido cambiando. 
+
+##### A partir de aquí trabajaremos con la serie desde el primer trimestre de 2014 al trimestre actual.
+
+### Ejercicio 5
+**Regresión lineal con la variable tiempo como explicativa. Explica los resultados obtenidos. ¿Qué previsión hay para el primer trimestre de 2022? ¿El ajuste es bueno?**
+```{r}
+ts_can_reduc = ts.can[29:length(ts.can)]
+
+tend = 1:length(ts_can_reduc)
+mod_lm=lm(ts_can_reduc~tend)
+summary(mod_lm)
+
+plot(ts_can_reduc,col="DarkBlue",lwd=2,type = "l",
+main = "Recta de regresión lineal",xlab="Tiempo",
+ylab="Precio",cex.main=1,xaxt="n")
+axis(1,c(1,9,17,25),c(2014,2016,2018,2020))
+lines(tend,fitted(mod_lm),col="2",lwd=2)
+legend(x = "bottomright",lty=c(1,1),legend=c("Serie temporal","Regresión lineal"),col=c("DarkBlue","2"),bty = "n",text.font = 0)
+
+new=data.frame(tend=31)
+predict(mod_lm, new, interval="confidence")
+
+```
+
+### Ejercicio 6
+**Da la ecuación para el modelo suavizado exponencial de Holt-Winters con los valores de R y el pronóstico para el primer trimestre de 2022.**
+https://towardsdatascience.com/time-series-forecasting-in-r-with-holt-winters-16ef9ebdb6c0?gi=6bf2d634ab94
+
+```{r}
+ts_can_reduc = ts(ts_can_reduc, frequency = 4, start=c(2014,1))
+mod_hw = HoltWinters(ts_can_reduc)
+mod_hw
+
+predict(mod_hw,3, prediction.interval = TRUE, level=0.95)
+```
+
+### Ejercicio 7
+**¿Es estacionaria la serie?**
+Haciendo el test adf.test de la librería tseries, podemos calcular estadísticamente si la serie es estacionaria o no. 
+
+```{r}
+library(tseries)
+adf.test(ts_can_reduc)
+```
+No se trata de un proceso estacionario
+
+**Diferencia la serie en el orden más conveniente. ¿La serie diferenciada es estacionaria?**
+El orden más conveniente será el orden 4, ya que la serie es trimestral.
+
+```{r}
+ts_can_diff = diff(ts_can_reduc, lag=4)
+ts.plot(ts_can_diff, col="DarkBlue", lwd=3,xlab="Tiempo", ylab="Precio", main="Serie diferenciada de lag 4")
+
+adf.test(ts_can_diff)
+```
+
+### Ejercicio 8
+**Utiliza la función auto.arima() de la serie sin diferencias. Explica y da el modelo que propone.**
+```{r}
+library("lmtest")
+fitarima = auto.arima(ts_can_reduc,allowdrift = FALSE)
+fitarima
+coeftest(fitarima)
+```
+
+### Ejercicio 9
+**Da una estimación puntual y intervalo de confianza del pronóstico para el primer trimestre de 2022 para el modelo del ejercicio anterior**
+```{r}
+library(knitr)
+forecast(ts_can_reduc, 3,model=fitarima,level = c(80, 95))
+```
+
+
+
+### Ejercicio 10
+**Estudia los residuos**
+```{r}
+library(stats)
+library(car)
+arima1 = arima(ts_can_reduc,c(1,1,0))
+plot.ts(arima1$residuals,sub="Residuales del modelo AR(1)", xlab="Tiempo",ylab="Residuales")
+par(mfrow = c(2,1))
+acf(arima1$residuals)
+pacf(arima1$residuals)
+
+par(mfrow = c(1,1))
+qqnorm(arima1$residuals, sub="Gráfico Q para evaluar normalidad");
+
+qqPlot(arima1$residuals, dist="norm", id=list(method="y", n=2))
+qqline(arima1$residuals)
+
+
+shapiro.test(arima1$residuals)
+```
+

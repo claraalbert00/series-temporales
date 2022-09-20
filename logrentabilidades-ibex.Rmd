@@ -1,0 +1,371 @@
+---
+title: "Prac 11"
+author: "Clara Albert"
+date: "3/1/2022"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Ejercicio 1
+
+```{r}
+library(forecast)
+library(tseries)
+library(TSA)
+library(quantmod)
+library(rugarch)
+library(fGarch)
+library(lmtest)
+
+ibex <- read.csv("IBEX.csv", dec=".")
+str(ibex)
+
+options(digits=13)
+ibex$Close = as.double(ibex$Close)
+str(ibex)
+
+ibex<- subset(ibex, ibex$Close != 'NA')
+```
+
+### Apartado a
+```{r}
+Rt = Delt(ibex$Close, type="log")
+Rt = subset(Rt,Rt != 'NA')
+
+which(ibex$Date == '2007-01-01')
+which(ibex$Date == '2008-01-02')
+which(ibex$Date == '2009-01-02')
+which(ibex$Date == '2010-01-04')
+which(ibex$Date == '2011-01-03')
+which(ibex$Date == '2012-01-02')
+which(ibex$Date == '2013-01-02')
+which(ibex$Date == '2014-01-02')
+which(ibex$Date == '2015-01-02')
+which(ibex$Date == '2016-01-04')
+which(ibex$Date == '2017-01-02')
+which(ibex$Date == '2018-01-02')
+which(ibex$Date == '2019-01-02')
+which(ibex$Date == '2020-01-02')
+which(ibex$Date == '2021-01-04')
+
+ts.ibex = ts(Rt)
+t.test(ts.ibex)
+summary(ts.ibex)
+
+t= 1:length(ts.ibex)
+summary(lm(ts.ibex~t))
+```
+
+Podemos suponer con un 95% de confianza que la media es 0.
+Además, realizando un ajuste lineal los coeficientes no son significativos por lo que no tiene tendencia. 
+
+```{r}
+plot(ts.ibex, col="darkblue",lwd=1, type="l",xlab="Tiempo", ylab="Log-rentabilidades", main="Evolución del Ibex35", cex.main=1,xaxt="n")
+axis(1, c(1,1019,2043,3066,4086), c(2006,2010,2014,2018,2022))
+```
+
+
+```{r}
+ts.ibex2019=ts.ibex[which(ibex$Date == '2019-01-02'):length(ts.ibex)]
+3577-3321
+3834-3321
+length(ts.ibex)-3321
+```
+
+```{r}
+plot(ts.ibex2019, col="darkblue",lwd=1, type="l",xlab="Tiempo", ylab="Log-rentabilidades", main="Evolución del Ibex35", cex.main=1,xaxt="n")
+axis(1,c(1,256,513, 765),c(2019,2020,2021, 2022))
+```
+
+Podemos observar que la serie oscila alrededor del valor 0, significando que 0 es la media y es constante. Además, exceputando algún pico, la oscilación de la amplitud también se mantiene constante. Hay indincios de que la serie es estacionaria. Aún así, realizamos el 
+
+```{r}
+summary(ts.ibex2019)
+adf.test(ts.ibex2019)
+```
+
+Periocidad: Diaria, por lo que tenemos 365 datos por año.
+La serie temporal es estacionaria, ya que el p-valor < 0.01. No tenemos evidencia suficiente para acceptar la H0.
+
+No tenemos que diferenciar ya que el proceso es estacionario. 
+
+### Apartado b
+```{r}
+eacf(ts.ibex2019)
+acf(ts.ibex2019)
+pacf(ts.ibex2019)
+Box.test(ts.ibex2019)
+```
+
+Según la eacf un ARMA(0,0) ya podría ser apropiado para este modelo. 
+
+Podríamos decir que nuestra serie es un ruido blanco.
+
+Además, realizando un test de Box-Pierce vemos que la serie no tiene correlación. 
+
+No vemos ningún indicio en la acf ni en la pacf que indique que modelo escoger. Ninguno muestra signos de que vaya a tender hacia cero. Es una evidencia más de que nuestro modelo es un ruido blanco.
+
+El eacf también propone un AR(2) o MA(2) como modelo más simple.
+
+Aún así, miramos que modelo nos propone la función auto.arima.
+
+### Apartado c
+```{r}
+arma=auto.arima(ts.ibex2019)
+summary(arma)
+coeftest(arma)
+arima(ts.ibex2019, order=c(1,0,0)) #Aunque haya un coeficiente no significativo, no es un mejor modelo
+arima(ts.ibex2019, order=c(2,0,0), fixed=c(0,NA,NA)) #Mejora muy poco el AIC
+```
+
+Nos propone un AR(2). Encaja con lo que muestra la eacf, pero no con lo que muestra la acf y la pacf. 
+
+X(t) = -0.0478*X(t-1) + 0.1646*X(t-2) + u(t)
+
+Donde Y(t-1) es el valor de Y en el período de tiempo (t-1) y u(t) es el error.
+
+Vemos que el primer coeficiente no es significativo, mientras que el segundo si que lo es. 
+
+### Apartado d
+
+#### Residuos 
+```{r}
+res=arma$residuals
+checkresiduals(res)
+auto.arima(res)
+```
+Vemos que los residuos a simple vista parecen compatibles con un ruido blanco. Los modelos ARIMA no son capaces de captar los efectos cuando la toma de datos es muy seguida. Por lo tanto, en estos casos, la serie suele ser un ruido blanco si intentamos modelarla como un modelo ARIMA. 
+
+Hay algún caso que sobrepasa los límites. 
+
+Vamos a estudiar los residuos al cuadrado:
+
+#### Residuos al cuadrado
+```{r}
+res=res^2
+
+plot(res, type="l")
+plot(res/sqrt(arma$sigma2), ylab ='Standardized Residuals^2', type="l"); abline(h=0)
+
+Box.test(res,type="Ljung")
+qqnorm(res);qqline(res)
+shapiro.test(res)
+
+checkresiduals(res)
+pacf(res)
+
+auto.arima(res)
+```
+
+Se puede ver como los residuos no son constantes, por lo tanto son homo...
+
+El p-valor del test de Ljung-Box nos permite rechazar la hipótesis de independencia. Por lo tanto, los residuos al cuadrado no son independientes. 
+
+El plot de normalidad se observan que la cola derecha es pesada.
+
+El test de normalidad de Shapiro Wilk indica que la distribución de los residuos no es compatible con una distribución normal. 
+
+Vemos que la campana de los residuos en el histograma no es exactamente normal. El apuntalamiento es mayor que el de una distribución normal (curtosis alta). Además, la distribución es asimétrica y las colas son distintas a las de una normal. 
+
+Las correlaciones de los residuos al cuadrado no siguen ningún patrón y no tienden a 0. Por lo tanto, hay correlación de los cuadrados de la serie. 
+
+A partir de todos estos resultados podemos comprobar como proponer un modelo ARIMA para esta serie no es lo más adecuado. 
+
+http://www.est.uc3m.es/esp/nueva_docencia/comp_col_get/lade/Econometria_II_NOdocencia/Documentaci%C3%B3n%20y%20apuntes/TEMA%2011_Introducci%C3%B3n%20a%20la%20econometr%C3%ADa%20financiera.%20Modelos%20ARCH.pdf
+
+
+### Apartado e
+
+#### ARMA(2,0)+GARCH(1,1)
+```{r}
+garch=garch(ts.ibex2019, trace=0)
+arma20_garch11=garchFit(~arma(2,0)+garch(1,1), data=ts.ibex2019, trace=F)
+summary(arma20_garch11)
+# plot(arma20_garch11)
+```
+
+Vemos como los coeficientes de ARMA(2,0) no son significativos. El test de normalidad nos indica que los residuos no son compatibles con una normal, por lo que tendríamos que buscar otra distribución. 
+Todos los Ljung-Box Test nos aceptan la hipótesi nula de que los residuos son independientes y el test de Arch nos indica que los datos se modelan bien con un modelo garch.
+
+Cuando visualizamos las acf de los residuos y los residuos al cuadrado vemos como ya no tienen autocorrelación, por lo que este modelo sería válido para estos datos. 
+
+#### GARCH(1,1)
+Eliminamos la parte ARMA ya que los coeficientes nos han salido no significativos.
+```{r}
+garch11=garchFit(~garch(1,1), data=ts.ibex2019, trace=F)
+summary(garch11)
+plot(garch11)
+Box.test(residuals(garch11),type="Ljung")
+```
+
+Todos los resultados son muy parecidos al modelo anterior
+
+#### GARCH(1,1)+distribución no normal
+```{r}
+garch11_nonorm=garchFit(~garch(1,1), data=ts.ibex2019, trace=F, cond.dist = "sstd")
+summary(garch11_nonorm)
+# plot(garch11_nonorm)
+```
+
+Cuando cambiamos la distribución condicional el AIC es un poco más bajo, pero la acf de los residuos al cuadrado sigue siendo la misma. 
+Aunque el AIC sea más bajo, tampoco lo es mucho más y por el principio de parsimonia nos quedamos con el modelo GARCH(1,1).
+
+#### Bondad de ajuste del modelo GARCH(1,1)
+```{r}
+df <- data.frame(real=ts.ibex2019, lower=pred[, 2], upper=pred[, 1])
+df$fora <- ifelse(df$real >= df$lower & df$real <= df$upper, 0, 1) 
+head(df) 
+table(df$fora)
+566/(566+196)
+```
+
+
+
+### Apartado g
+
+```{r}
+pred=predict(garch(ts.ibex2019, order=c(1,1),trace=F))
+plot(ts.ibex2019, col="darkblue",lwd=1, type="l",xlab="Tiempo", ylab="Log-rentabilidades", main="Evolución del Ibex35", cex.main=1,xaxt="n", ylim=c(-0.25,0.25))
+axis(1,c(1,256,513, 765),c(2019,2020,2021, 2022))
+lines(pred[,1], col="red")
+lines(pred[,2], col="red")
+```
+
+
+## Ejercicio 2
+
+```{r}
+library(readr)
+precio_luz <- read_csv("precio_luz.csv", locale = locale(decimal_mark = ","))
+head(precio_luz)
+
+which(precio_luz$Periodo == "01-03-2021")
+which(precio_luz$Periodo == "01-05-2021")
+which(precio_luz$Periodo == "01-07-2021")
+which(precio_luz$Periodo == "01-09-2021")
+which(precio_luz$Periodo == "01-11-2021")
+```
+
+### Apartado a
+```{r}
+ts.luz <- ts(precio_luz$`Euros (€/MWh)`)
+```
+
+```{r}
+plot(ts.luz,col="darkblue",lwd=1, type="l",xlab="Tiempo", ylab="Euros (€/MWh)", main="Evolución del precio de la luz en 2021", cex.main=1.25,xaxt="n")
+axis(1,c(1,60,121,182,244,305),c("ene","mar","may","jul","sep","nov"))
+```
+
+```{r}
+length(ts.luz)
+adf.test(ts.luz)
+```
+
+La serie tiene 362 observaciones, una para cada dia del año desde el 01/01/2021 hasta el 28/12/2021
+
+Cada vez tiene mas varianza y la media no es constante, por lo tanto a simple vista no es estacionaria.
+
+Tendencia creciente. 
+
+### Apartado b
+Una regresión lineal no tendría mucho sentido realizarla, ya que vemos que la varianza va cambiando por lo que cada vez los residuos serían más grandes. Además, se puede intuir que una regresión logística le iría mucho mejor, ya que los datos crecen de manera exponencial no lineal.
+
+Aún así, realizamos regresión lineal sobre la serie y estudiamos los residuos.
+```{r}
+mod = lm(ts.luz~seq(1,length(ts.luz)))
+summary(mod)
+```
+Vemos que el R-cuadrado no es excesivamente alto, por lo tanto la varianza está poco explicada. 
+
+El coeficiente del tiempo es significativo. 
+
+Para validar el modelo, tenemos que estudiar los residuos.
+https://www.statdeveloper.com/regresion-lineal-multiple-en-r/
+https://www.maximaformacion.es/blog-dat/como-validar-tu-modelo-de-regresion/
+
+```{r}
+par(mfrow=c(2,2))
+plot(mod)
+plot(mod, which=4)
+```
+
+Hay una falta de linealidad en los residuos, ya que la línea roja no es del todo recta. Hay bastantes residuos con valor absoluto alto, sobretodo en la cola derecha. La falta de normalidad se puede apreciar bien el el qqplot.
+
+Al calcular la distancia de Cook, hay valores atípicos pero no superan el umbral que se pide para tratarlos como tal (distancia > 1).
+
+### Apartado c
+
+Primero de todo, hemos de diferenciar la serie ya que no es estacionaria. 
+```{r}
+ts.luz_diff=diff(ts.luz)
+```
+
+Visualizamos la serie diferenciada y hacemos el test adf para ver si sigue siendo no estacionaria.
+```{r}
+plot(ts.luz_diff,col="darkblue",lwd=1, type="l",xlab="Tiempo", ylab="Euros (€/MWh)", main="Evolución del precio de la luz en 2021", cex.main=1.25,xaxt="n")
+axis(1,c(1,60,121,182,244,305),c("ene","mar","may","jul","sep","nov"))
+```
+
+Podemos observar que ahora la media si que se mantiene constante a lo largo del tiempo y además no hay demasiados cambios en la variabilidad.
+```{r}
+adf.test(ts.luz_diff)
+eacf(ts.luz_diff)
+acf(ts.luz_diff)
+pacf(ts.luz_diff)
+```
+
+Un indicio de que la serie es estacionaria es que en su acf y pacf se comporta como un ruido blanco.
+
+Vemos que modelo propone la función auto.arima.
+```{r}
+arima=auto.arima(ts.luz_diff)
+summary(arima)
+coeftest(arima)
+checkresiduals(arima)
+checkresiduals(arima$residuals^2)
+auto.arima(arima$residuals^2)
+```
+
+Propone un modelo ARMA (2,2). Según la eacf es un modelo válido para los datos. Los residuos parecen ser correctos (parecen ruido blanco). 
+
+auto.arima de la serie diferenciada: ARIMA(2,0,2)
+auto.arima de la serie no diferenciada: ARIMA(2,1,2)
+Dan los mismos resultados.
+
+Observamos un patron en los errores al cuadrado por lo tanto propondremos un modelo garch
+
+#### Modelo ARMA(2,2) + GARCH(1,1)
+```{r}
+garch=garch(arima$residuals,trace=0)
+arma22_garch11<-garchFit(~arma(2,2)+garch(1,1), data=ts.luz_diff, trace=F)
+summary(arma22_garch11)
+# plot(arma22_garch11)
+```
+
+Los coeficientes del ARMA no existen (NA) por lo que proponenmos un modelo GARCH
+
+#### Modelo GARCH(1,1)
+```{r}
+garch11<-garchFit(~garch(1,1), data=ts.luz_diff, trace=F)
+summary(garch11)
+plot(garch11)
+```
+
+```{r}
+summary(garchFit(~garch(1,2), data=ts.luz_diff, trace=F))
+summary(garchFit(~garch(2,1), data=ts.luz_diff, trace=F))
+```
+
+El mejor modelo es garch(1,1)
+
+```{r}
+predict(garch11, 90, plot=T)
+```
+
+
+
